@@ -178,6 +178,28 @@ def associate(detections: Sequence[Candidate], objects: Sequence[Candidate],
     return out
 
 
+def grasp_volume(box: Box, margin: float, below: float,
+                 height: float) -> Tuple[Vec3, Vec3]:
+    """
+    Axis-aligned volume (fixed frame) where grasps of an object are searched.
+
+    x and y: the box footprint plus ``margin``. z: from ``below`` under the box
+    bottom (the support surface is then inside, as volumetric detectors such
+    as VGN expect) to at least ``height`` above that, and at least ``margin``
+    above the box top.
+
+    :return: (min corner, max corner).
+    """
+    h = [0.5 * s for s in box.size]
+    corners = [rotate(box.quaternion, (sx * h[0], sy * h[1], sz * h[2]))
+               for sx in (-1, 1) for sy in (-1, 1) for sz in (-1, 1)]
+    lo = [box.center[i] + min(c[i] for c in corners) for i in range(3)]
+    hi = [box.center[i] + max(c[i] for c in corners) for i in range(3)]
+    z0 = lo[2] - below
+    return ((lo[0] - margin, lo[1] - margin, z0),
+            (hi[0] + margin, hi[1] + margin, max(z0 + height, hi[2] + margin)))
+
+
 def best_grasp_index(scores: Sequence[float]) -> Optional[int]:
     """Index of the highest score, None if empty."""
     return int(np.argmax(scores)) if len(scores) else None

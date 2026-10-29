@@ -107,6 +107,24 @@ def test_update_existing_and_grasps(store):
     assert store.scene_version == 2   # failed update: nothing written
 
 
+def test_set_grasps_keeps_pose_and_statistics(store):
+    stack_scene(store)
+    before = store.get('cup_1')
+    g = [GraspRecord((0, 0, 0.9), (0, 0, 0, 1), 0.7), GraspRecord((0, 0, 0.9), (0, 0, 0, 1), 0.9)]
+    res = store.set_grasps('cup_1', g, 5 * S)
+    cup = store.get('cup_1')
+    assert [x.score for x in cup.grasps] == pytest.approx([0.9, 0.7])
+    assert cup.grasps_stamp_ns == 5 * S
+    assert (cup.center, cup.size, cup.observations, cup.confidence, cup.last_seen_ns) == \
+        (before.center, before.size, before.observations, before.confidence,
+         before.last_seen_ns)
+    assert res.events[0].kind == 'object_updated' and res.scene_version == 2
+    assert store.set_grasps('cup_1', [], 6 * S) and store.get('cup_1').grasps == []
+    with pytest.raises(SceneError):
+        store.set_grasps('cup_99', g, 7 * S)
+    assert store.scene_version == 3
+
+
 def test_moved_object_recomputes_relations(store):
     stack_scene(store)
     res = store.update_scene(2 * S, [obj('cup', (0.0, -0.3, 0.75), oid='cup_1', moved=True)])

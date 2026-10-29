@@ -24,6 +24,7 @@ from scene_db.association import (
     AssociationConfig,
     Candidate,
     containment_depth,
+    grasp_volume,
     match_grasps,
     rotate,
     transform_pose,
@@ -68,6 +69,18 @@ def test_match_grasps_skips_non_eligible_boxes():
            (-0.3, 0.1, 0.19)]   # only in the table box: an undetected object
     assert match_grasps(pts, [table, cup], 0.015) == [0, 0]   # the table box is deeper
     assert match_grasps(pts, [table, cup], 0.015, eligible=[False, True]) == [1, -1]
+
+
+def test_grasp_volume():
+    yaw45 = (0.0, 0.0, math.sin(math.pi / 8), math.cos(math.pi / 8))
+    box = Box((1.0, 0.0, 0.85), yaw45, (0.1, 0.1, 0.1))
+    lo, hi = grasp_volume(box, margin=0.05, below=0.05, height=0.3)
+    r = 0.05 * math.sqrt(2.0)          # half diagonal of the rotated footprint
+    assert lo == pytest.approx((1.0 - r - 0.05, -r - 0.05, 0.75))
+    assert hi == pytest.approx((1.0 + r + 0.05, r + 0.05, 1.05))
+    tall = Box((0.0, 0.0, 0.3), (0, 0, 0, 1), (0.1, 0.1, 0.6))
+    lo, hi = grasp_volume(tall, margin=0.05, below=0.05, height=0.3)
+    assert lo[2] == pytest.approx(-0.05) and hi[2] == pytest.approx(0.65)
 
 
 def test_associate_hungarian_and_moves():

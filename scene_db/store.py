@@ -730,6 +730,25 @@ class SceneStore:
         return WriteResult(version, [Event(RELATION_CHANGED, row[1], relation_id, 'removed')],
                            message=f'Removed relation {relation_id}')
 
+    def set_grasps(self, object_id: str, grasps: Sequence[GraspRecord],
+                   stamp_ns: int) -> WriteResult:
+        """Replace the grasps of one object; its pose and statistics are kept."""
+        with self._tx() as con:
+            if not con.execute('SELECT 1 FROM objects WHERE id = ?', (object_id,)).fetchone():
+                raise SceneError(f"Unknown object id '{object_id}'")
+            con.execute('DELETE FROM grasps WHERE object_id = ?', (object_id,))
+            con.executemany(
+                'INSERT INTO grasps (object_id, px, py, pz, qx, qy, qz, qw, score, '
+                'width, height, depth, stamp_ns) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                [(object_id, *g.position, *g.quaternion, g.score, g.width, g.height,
+                  g.depth, g.stamp_ns or stamp_ns) for g in grasps])
+            con.execute('UPDATE objects SET grasps_stamp_ns = ? WHERE id = ?',
+                        (stamp_ns, object_id))
+            version = self._bump()
+        return WriteResult(version, [Event(OBJECT_UPDATED, object_id,
+                                           details=f'{len(grasps)} grasps')],
+                           message=f"{len(grasps)} grasps stored for '{object_id}'")
+
     def set_properties(self, object_id: str, properties: Dict[str, str]) -> WriteResult:
         """Add or overwrite user properties."""
         if any(not k for k in properties):

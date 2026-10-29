@@ -19,6 +19,9 @@ Examples::
 
     ros2 run scene_db cli acquire --grasps
     ros2 run scene_db cli list
+    ros2 run scene_db cli capture --clear      # first view near the object
+    ros2 run scene_db cli capture              # more views
+    ros2 run scene_db cli acquire-grasps cup_1
     ros2 run scene_db cli query class=cup color=blue
     ros2 run scene_db cli query near=1.2,0,0.8 radius=0.5 max_results=1
     ros2 run scene_db cli query property.located="blue box"
@@ -42,7 +45,9 @@ from rclpy.node import Node
 from scene_msgs.msg import KeyValue, Relation
 from scene_msgs.srv import (
     Acquire,
+    AcquireGrasps,
     AddRelation,
+    CaptureView,
     Query,
     QueryObjects,
     QueryRelations,
@@ -103,6 +108,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser('acquire', help='run one acquisition (scene_updater)')
     p.add_argument('--grasps', action='store_true', help='also detect grasps')
+    p = sub.add_parser('capture', help='store a view for acquire-grasps (scene_updater)')
+    p.add_argument('--clear', action='store_true', help='drop the stored views first')
+    sub.add_parser('clear-views', help='drop the views stored with capture')
+    p = sub.add_parser('acquire-grasps', help='grasps of one object from the stored views')
+    p.add_argument('id')
+    p.add_argument('--margin', type=float, default=0.0, help='volume margin [m]')
+    p.add_argument('--keep-views', action='store_true')
     sub.add_parser('list', help='list all objects')
     p = sub.add_parser('query', help='query objects with key=value filters')
     p.add_argument('filters', nargs='*', metavar='KEY=VALUE')
@@ -168,6 +180,24 @@ def run(args) -> int:
                            ('unchanged', res.unchanged_ids)):
             if ids:
                 print(f'  {label}: {", ".join(ids)}')
+        return code
+    updater = args.updater.rstrip('/')
+    if c in ('capture', 'clear-views'):
+        res = call(node, CaptureView, f'{updater}/capture_view', CaptureView.Request(
+            clear=c == 'capture' and args.clear, clear_only=c == 'clear-views'), t)
+        code = status(res)
+        if c == 'capture' and res.success:
+            q = res.camera_pose.position
+            print(f'  camera at ({q.x:+.3f}, {q.y:+.3f}, {q.z:+.3f})')
+        return code
+    if c == 'acquire-grasps':
+        res = call(node, AcquireGrasps, f'{updater}/acquire_grasps', AcquireGrasps.Request(
+            object_id=args.id, margin=args.margin, keep_views=args.keep_views), t)
+        code = status(res)
+        lo, hi = res.workspace_min, res.workspace_max
+        if res.success:
+            print(f'  volume ({lo.x:+.3f}, {lo.y:+.3f}, {lo.z:+.3f}) .. '
+                  f'({hi.x:+.3f}, {hi.y:+.3f}, {hi.z:+.3f})')
         return code
     if c in ('list', 'query'):
         filters = parse_pairs(args.filters) if c == 'query' else []

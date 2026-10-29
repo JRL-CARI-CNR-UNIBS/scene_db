@@ -10,7 +10,7 @@ The package contains three nodes:
 | Node | Role |
 |---|---|
 | `scene_db` | The database: a SQLite file (single source of truth) exposed through services and topics |
-| `scene_updater` | Runs one acquisition on request: object detection and grasp detection in parallel on the same images, grasp-to-object matching, data association, one atomic `UpdateScene` |
+| `scene_updater` | Runs one acquisition on request: object detection and grasp detection in parallel on the same images, grasp-to-object matching, data association, one atomic `UpdateScene`. Also grasps of one object from close views (`capture_view` + `acquire_grasps`, see `docs/API.md`) |
 | `mock_grasp_server` | Geometric stand-in for AnyGrasp with the same interface (`grasp_detection_msgs/DetectGrasps`) |
 
 ```

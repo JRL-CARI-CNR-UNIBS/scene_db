@@ -34,6 +34,13 @@ scene_updater:
     grasp_margin: 0.015           # [m] box expansion when assigning grasps
     no_grasp_classes: ["dining table"]  # supports: never get grasps ([""] = none)
     max_grasps_per_object: 10
+    # Grasps of one object from close views (capture_view + acquire_grasps).
+    multiview_grasp_service: "/vgn_grasp_server/multiview_detect_grasps"
+    grasp_volume_margin: 0.05     # [m] around the object box (x, y, above the top)
+    grasp_volume_below: 0.05      # [m] below the box bottom (VGN: table ~5 cm above the volume floor)
+    grasp_volume_height: 0.30     # [m] minimum volume height (VGN: 0.30)
+    object_grasp_margin: 0.03     # [m] box expansion when keeping the object grasps
+    max_views: 20
     min_grasp_score: 0.0
 
     association_distance: 0.15    # [m] min gate between centers

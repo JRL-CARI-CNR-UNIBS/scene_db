@@ -50,6 +50,7 @@ from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from scene_db.conversions import (
     event_to_msg,
+    grasp_to_record,
     key_values,
     msg_to_relation,
     object_to_msg,
@@ -68,6 +69,7 @@ from scene_msgs.srv import (
     RemoveObject,
     RemoveProperties,
     RemoveRelation,
+    SetGrasps,
     SetProperties,
     SetRelationState,
     UpdateScene,
@@ -122,6 +124,7 @@ class SceneDbNode(Node):
                 (Query, '~/query', self._srv_query),
                 (RemoveObject, '~/remove_object', self._srv_remove_object),
                 (SetProperties, '~/set_properties', self._srv_set_properties),
+                (SetGrasps, '~/set_grasps', self._srv_set_grasps),
                 (RemoveProperties, '~/remove_properties', self._srv_remove_properties),
                 (AddRelation, '~/add_relation', self._srv_add_relation),
                 (RemoveRelation, '~/remove_relation', self._srv_remove_relation),
@@ -250,6 +253,12 @@ class SceneDbNode(Node):
             res.object_ids, res.changed_object_ids = out.object_ids, out.changed_object_ids
             res.message = res.message or (
                 f'{len(inputs)} objects ({len(out.changed_object_ids)} added or moved)')
+        return res
+
+    def _srv_set_grasps(self, req, res):
+        stamp = time_to_ns(req.stamp) or self.get_clock().now().nanoseconds
+        grasps = [grasp_to_record(g) for g in req.grasps]
+        self._run_write(res, lambda: self._store.set_grasps(req.object_id, grasps, stamp))
         return res
 
     def _srv_query_objects(self, req, res):

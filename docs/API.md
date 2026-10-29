@@ -113,6 +113,12 @@ objects that were `on_top_of` it become `to_verify` (returned in
 `to_verify_ids`); geometric relations of its former neighbors are
 recomputed. This is the **only** way objects leave the database.
 
+#### `~/set_grasps` (`scene_msgs/SetGrasps`)
+
+Replaces the grasps of one object (`object_id`, `stamp` of the images,
+`grasps` in the fixed frame). Pose, size, confidence and observations are not
+changed; emits `object_updated`. Used by `scene_updater ~/acquire_grasps`.
+
 #### `~/set_properties`, `~/remove_properties`
 
 User properties, free `key: value` strings (`located: blue box`,
@@ -262,6 +268,38 @@ Response: `added_ids`, `moved_ids`, `unchanged_ids`, `num_detections`,
 
 Stored objects that are not detected are **not** changed.
 
+### Grasps from close views: `~/capture_view`, `~/acquire_grasps`
+
+Two-step use, for detectors that work best at different distances (YOLO
+from ~1 m, volumetric grasp detection from ~0.5 m):
+
+1. `acquire` (no grasps) from one or more far views: objects only.
+2. The orchestrator reads the object pose and box (`query_objects id=<obj>`),
+   moves the camera near the object and calls `capture_view` for each view.
+3. `acquire_grasps <obj>`.
+
+`~/capture_view` (`scene_msgs/CaptureView`) stores the first synchronized
+frame after the request with the camera pose (tf from the fixed frame at the
+image stamp). `clear` drops the stored views first, `clear_only` only drops
+them. At most `max_views` views.
+
+`~/acquire_grasps` (`scene_msgs/AcquireGrasps`):
+
+1. reads all objects; the volume is the object box footprint plus `margin`
+   (default `grasp_volume_margin`), from `grasp_volume_below` under the box
+   bottom to at least `grasp_volume_height` above that (VGN expects the
+   table about 5 cm above the volume floor and a 0.30 m height);
+2. calls `multiview_grasp_service` (`grasp_detection_msgs/MultiviewDetectGrasps`)
+   with the stored views, their poses and the volume;
+3. keeps the grasps inside the object box expanded by `object_grasp_margin`
+   (grasps inside other boxes belong to those objects and are dropped;
+   `no_grasp_classes` are ignored), best `max_grasps_per_object`;
+4. checks that the object box did not change meanwhile, then writes with
+   `scene_db/set_grasps`. Stored views are cleared unless `keep_views`.
+
+The volume is computed around the object, so the workspace of the grasp
+detector never needs to cover the whole table.
+
 ### Topics
 
 | Topic | Type |
@@ -294,6 +332,12 @@ Stored objects that are not detected are **not** changed.
 | `move_threshold` | 0.03 | m |
 | `move_size_factor` | 0.2 | |
 | `match_color` | false | |
+| `multiview_grasp_service` | `/vgn_grasp_server/multiview_detect_grasps` | Used by `acquire_grasps` |
+| `grasp_volume_margin` | 0.05 | m around the object box |
+| `grasp_volume_below` | 0.05 | m below the box bottom |
+| `grasp_volume_height` | 0.30 | m, minimum volume height |
+| `object_grasp_margin` | 0.03 | m, box expansion when keeping the object grasps |
+| `max_views` | 20 | Views stored by `capture_view` |
 
 ---
 
@@ -371,6 +415,9 @@ print(store.query_objects({'class': 'cup'}, now_ns=0))
 | Command | Example |
 |---|---|
 | `acquire [--grasps]` | `cli acquire --grasps` |
+| `capture [--clear]` | `cli capture --clear` |
+| `clear-views` | `cli clear-views` |
+| `acquire-grasps ID [--margin M] [--keep-views]` | `cli acquire-grasps cup_1` |
 | `list` | `cli list` |
 | `query KEY=VALUE...` | `cli query class=cup near=1,0,0.8 radius=0.3` |
 | `relations KEY=VALUE...` | `cli relations object_id=cup_1` |
