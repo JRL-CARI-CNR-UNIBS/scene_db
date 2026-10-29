@@ -310,6 +310,66 @@ ros2 param set /scene_updater grasp_service /anygrasp/detect_grasps   # or in pa
 node.) Grasps must come back in the color optical frame with the image stamp;
 the updater transforms them with TF.
 
+### B5. Grasps from close views (YOLO far, grasps near)
+
+Object detectors and grasp detectors like different distances: YOLO needs
+the whole object in a reasonably large view (~1 m), a volumetric grasp
+detector such as VGN wants precise depth (~0.5 m) and a small volume. Split
+the acquisition in two steps.
+
+Start a `MultiviewDetectGrasps` server, e.g. VGN (see
+`vgn_grasp_server`, in its own conda workspace):
+
+```bash
+ros2 launch vgn_grasp_server vgn_grasp_server.launch.py
+```
+
+**1. Objects from far** (one or more views; no grasps):
+
+```bash
+ros2 run scene_db cli acquire          # move the camera, acquire again: same ids
+ros2 run scene_db cli list
+```
+
+**2. Where is the object?** The orchestrator reads its box:
+
+```bash
+ros2 run scene_db cli query id=cup_1 include_grasps=false
+#   cup_1  cyan  cup  (+1.130, +0.188, +0.823) size (0.14, 0.13, 0.09) ...
+```
+
+**3. Close views.** Move the camera around the object (e.g. 3 views, 0.35 m
+away and 0.40 m above, 50° apart) and store each one:
+
+```bash
+ros2 run scene_db cli capture --clear  # first view: drop old views
+ros2 run scene_db cli capture          # second view
+ros2 run scene_db cli capture          # third view
+```
+
+The camera pose is taken from TF at the image stamp: on a robot it comes from
+the kinematics and the hand-eye calibration.
+
+**4. Grasps of that object:**
+
+```bash
+ros2 run scene_db cli acquire-grasps cup_1
+# OK: 'cup_1': 7/14 grasps from 3 views (0.14 s) (scene version 5)
+#   volume (+1.010, +0.073, +0.728) .. (+1.250, +0.303, +1.028)
+```
+
+The views are fused in a volume around the box (5 cm margin, floor 5 cm below
+the box, 0.30 m high: the layout VGN was trained on), so the grasp detector
+never has to cover the whole table. Grasps inside other boxes belong to those
+objects and are dropped (7 of 14 above); pose and statistics of `cup_1` do
+not change, only its grasps.
+
+In Gazebo, `yolo_rgbd_sim` has a fixed camera: move it with the
+`/world/tabletop/set_pose` Gazebo service and publish the matching
+`world -> camera_link` transform. Note that rclpy's
+`StaticTransformBroadcaster` ignores updates of a frame it already published:
+publish a `tf2_msgs/TFMessage` on `/tf_static` yourself, or use `/tf`.
+
 ---
 
 ## Part C: a client program
@@ -380,6 +440,9 @@ as `scene_updater.py` does.
 | `acquire`: `No synchronized color/depth/camera_info` | Wrong camera namespace (`camera:=`), depth not aligned (`align_depth.enable:=true`), or the camera is not publishing |
 | `acquire`: `Service ... not available` | Detector or grasp server not running; check `detect_service` / `grasp_service` |
 | `acquire`: TF error | No transform from the camera to `fixed_frame` at the image stamp |
+| `acquire_grasps`: `no stored views` | Call `capture` first (views are cleared after each `acquire-grasps` unless `--keep-views`) |
+| `acquire_grasps`: 0 grasps | Views do not see the object, wrong camera poses in TF (check `capture` output), or volume too small (`--margin`) |
+| Same object twice with different classes (e.g. `cup_1` and `bowl_1`) | The detector changed its mind between views; the association only merges equal classes. Remove the wrong one |
 | `stores objects in frame 'world', but the fixed frame is 'map'` at startup | The file was created with another frame: use another `database_file` or `reset_on_start:=true` |
 | Objects duplicated after small moves | Increase `association_distance` / `association_size_factor` |
 | Unwanted `moved` events from noise | Increase `move_threshold` |
