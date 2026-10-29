@@ -1,0 +1,50 @@
+# Parameters of the scene_db package nodes. See docs/API.md for details.
+scene_db:
+  ros__parameters:
+    fixed_frame: "world"                     # frame of all stored geometry (static w.r.t. the scene)
+    database_file: "~/.ros/scene_db.sqlite"  # ":memory:" = no persistence
+    reset_on_start: false                    # delete the file at startup
+
+    # --- Geometric relations (computed by scene_db) ---------------------------
+    on_top_tolerance: 0.03        # [m] penetration of A's bottom into its support's top
+    on_top_max_gap: 0.15          # [m] max gap A bottom - support top (single views see only tops)
+    on_top_min_overlap: 0.3       # min fraction of A's footprint over B
+    inside_tolerance: 0.02        # [m]
+    near_distance: 0.3            # [m] center distance for near / left_of / right_of
+    lateral_tolerance: 0.05       # [m] dead band of left_of / right_of
+    left_axis: [0.0, 1.0, 0.0]    # direction of "left" in fixed_frame
+
+    # --- Mechanical relations ---------------------------------------------------
+    inferred_min_confidence: 0.7  # inferred relations below this need a second observation
+    blocking_types: ["closed_by", "held_by"]  # "A type B": B must be removed before A
+
+    publish_markers: true
+
+scene_updater:
+  ros__parameters:
+    fixed_frame: "world"
+    detect_service: "/yolo_rgbd_detector/detect"
+    grasp_service: "/mock_grasp_server/detect_grasps"   # AnyGrasp server in the real cell
+    scene_db: "/scene_db"
+    timeout: 10.0                 # [s] per step
+    sync_slop: 0.05               # [s] color/depth/info synchronization
+    min_score: 0.0                # detection score (0 = detector default)
+    classes: [""]                 # class filter ([""] = detector default)
+
+    grasp_margin: 0.015           # [m] box expansion when assigning grasps
+    no_grasp_classes: ["dining table"]  # supports: never get grasps ([""] = none)
+    max_grasps_per_object: 10
+    min_grasp_score: 0.0
+
+    association_distance: 0.15    # [m] min gate between centers
+    association_size_factor: 0.5  # gate = max(distance, factor * larger side)
+    move_threshold: 0.03          # [m] min displacement considered a move
+    move_size_factor: 0.2         # move gate = max(threshold, factor * larger side)
+    match_color: false
+
+mock_grasp_server:
+  ros__parameters:
+    min_height: 0.01              # [m] above the support plane
+    max_width: 0.1                # [m] gripper opening
+    min_points: 100
+    max_depth: 3.0                # [m]

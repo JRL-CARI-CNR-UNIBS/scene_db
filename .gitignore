@@ -1,0 +1,14 @@
+*~
+*.kdev4
+kdev4/
+*.txt.user*
+*.orig*
+*.autosave*
+*.idea
+
+# Doxygen output
+doxygen/
+
+# Python
+__pycache__/
+*.pyc
